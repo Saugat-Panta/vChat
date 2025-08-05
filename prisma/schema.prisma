@@ -1,0 +1,257 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  username    String   @unique
+  name        String?
+  bio         String?
+  avatar      String?
+  coverImage  String?
+  phone       String?
+  isVerified  Boolean  @default(false)
+  isOnline    Boolean  @default(false)
+  lastSeen    DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Authentication
+  hashedPassword String?
+  
+  // Social features
+  posts       Post[]
+  stories     Story[]
+  reels       Reel[]
+  comments    Comment[]
+  likes       Like[]
+  
+  // Following system
+  following   Follow[] @relation("UserFollowing")
+  followers   Follow[] @relation("UserFollowers")
+  
+  // Messaging
+  sentMessages     Message[] @relation("MessageSender")
+  receivedMessages Message[] @relation("MessageReceiver")
+  
+  // Chat participants
+  chatParticipants ChatParticipant[]
+  
+  // Notifications
+  sentNotifications     Notification[] @relation("NotificationSender")
+  receivedNotifications Notification[] @relation("NotificationReceiver")
+  
+  @@map("users")
+}
+
+model Follow {
+  id          String @id @default(cuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+  
+  follower    User @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  content   String?
+  images    String[]
+  videos    String[]
+  authorId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+  
+  @@map("posts")
+}
+
+model Story {
+  id        String   @id @default(cuid())
+  content   String?
+  image     String?
+  video     String?
+  authorId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  
+  author User @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  views  StoryView[]
+  
+  @@map("stories")
+}
+
+model StoryView {
+  id      String @id @default(cuid())
+  storyId String
+  userId  String
+  viewedAt DateTime @default(now())
+  
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  @@unique([storyId, userId])
+  @@map("story_views")
+}
+
+model Reel {
+  id          String   @id @default(cuid())
+  video       String
+  thumbnail   String?
+  caption     String?
+  music       String?
+  authorId    String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  comments Comment[]
+  likes    Like[]
+  
+  @@map("reels")
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  authorId  String
+  postId    String?
+  reelId    String?
+  parentId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  
+  author   User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  post     Post?     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reel     Reel?     @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+  likes    Like[]
+  
+  @@map("comments")
+}
+
+model Like {
+  id        String @id @default(cuid())
+  userId    String
+  postId    String?
+  reelId    String?
+  commentId String?
+  createdAt DateTime @default(now())
+  
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post    Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  reel    Reel?    @relation(fields: [reelId], references: [id], onDelete: Cascade)
+  comment Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, postId])
+  @@unique([userId, reelId])
+  @@unique([userId, commentId])
+  @@map("likes")
+}
+
+model Chat {
+  id          String   @id @default(cuid())
+  name        String?
+  isGroup     Boolean  @default(false)
+  groupAvatar String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  participants ChatParticipant[]
+  messages     Message[]
+  
+  @@map("chats")
+}
+
+model ChatParticipant {
+  id       String @id @default(cuid())
+  chatId   String
+  userId   String
+  role     ChatRole @default(MEMBER)
+  joinedAt DateTime @default(now())
+  
+  chat Chat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@unique([chatId, userId])
+  @@map("chat_participants")
+}
+
+model Message {
+  id          String      @id @default(cuid())
+  content     String?
+  messageType MessageType @default(TEXT)
+  fileUrl     String?
+  fileName    String?
+  fileSize    Int?
+  chatId      String
+  senderId    String
+  replyToId   String?
+  isEdited    Boolean     @default(false)
+  isDeleted   Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  
+  chat     Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  sender   User     @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  replyTo  Message? @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies  Message[] @relation("MessageReplies")
+  
+  @@map("messages")
+}
+
+model Notification {
+  id         String           @id @default(cuid())
+  type       NotificationType
+  content    String
+  isRead     Boolean          @default(false)
+  senderId   String?
+  receiverId String
+  entityId   String? // ID of the related entity (post, comment, etc.)
+  createdAt  DateTime         @default(now())
+  
+  sender   User? @relation("NotificationSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver User  @relation("NotificationReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  
+  @@map("notifications")
+}
+
+enum ChatRole {
+  ADMIN
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  VOICE_NOTE
+}
+
+enum NotificationType {
+  LIKE
+  COMMENT
+  FOLLOW
+  MESSAGE
+  MENTION
+  POST_UPLOAD
+  STORY_VIEW
+}
