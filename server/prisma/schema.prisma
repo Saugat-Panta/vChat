@@ -1,0 +1,371 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  email           String    @unique
+  username        String    @unique
+  displayName     String
+  avatar          String?
+  bio             String?
+  phone           String?   @unique
+  isOnline        Boolean   @default(false)
+  lastSeen        DateTime  @default(now())
+  isVerified      Boolean   @default(false)
+  
+  // Authentication
+  password        String
+  refreshTokens   String[]
+  emailVerified   DateTime?
+  phoneVerified   DateTime?
+  
+  // Social Features
+  followers       Follow[]  @relation("UserFollowers")
+  following       Follow[]  @relation("UserFollowing")
+  
+  // Messaging
+  sentMessages    Message[] @relation("MessageSender")
+  conversations   ConversationParticipant[]
+  
+  // Media
+  posts           Post[]
+  stories         Story[]
+  comments        Comment[]
+  likes           Like[]
+  
+  // Video Calls
+  callsSent       Call[]    @relation("CallSender")
+  callsReceived   Call[]    @relation("CallReceiver")
+  
+  // Settings
+  settings        UserSettings?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model UserSettings {
+  id              String    @id @default(cuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Privacy
+  isProfilePublic Boolean   @default(true)
+  showOnlineStatus Boolean  @default(true)
+  showLastSeen    Boolean   @default(true)
+  
+  // Notifications
+  messageNotifications     Boolean @default(true)
+  callNotifications        Boolean @default(true)
+  likeNotifications        Boolean @default(true)
+  commentNotifications     Boolean @default(true)
+  followNotifications      Boolean @default(true)
+  
+  // App Settings
+  theme           String    @default("light") // light, dark, auto
+  language        String    @default("en")
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@map("user_settings")
+}
+
+model Follow {
+  id          String   @id @default(cuid())
+  followerId  String
+  followingId String
+  
+  follower    User     @relation("UserFollowing", fields: [followerId], references: [id], onDelete: Cascade)
+  following   User     @relation("UserFollowers", fields: [followingId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime @default(now())
+
+  @@unique([followerId, followingId])
+  @@map("follows")
+}
+
+model Conversation {
+  id            String    @id @default(cuid())
+  type          ConversationType @default(DIRECT)
+  name          String?
+  avatar        String?
+  description   String?
+  isGroup       Boolean   @default(false)
+  
+  participants  ConversationParticipant[]
+  messages      Message[]
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@map("conversations")
+}
+
+model ConversationParticipant {
+  id             String       @id @default(cuid())
+  conversationId String
+  userId         String
+  role           ParticipantRole @default(MEMBER)
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  joinedAt       DateTime     @default(now())
+  leftAt         DateTime?
+
+  @@unique([conversationId, userId])
+  @@map("conversation_participants")
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  senderId       String
+  content        String?
+  type           MessageType  @default(TEXT)
+  
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender         User         @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  // Media attachments
+  attachments    MessageAttachment[]
+  
+  // Message status
+  isEdited       Boolean      @default(false)
+  isDeleted      Boolean      @default(false)
+  readBy         MessageRead[]
+  
+  // Reply functionality
+  replyToId      String?
+  replyTo        Message?     @relation("MessageReplies", fields: [replyToId], references: [id])
+  replies        Message[]    @relation("MessageReplies")
+  
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id          String      @id @default(cuid())
+  messageId   String
+  type        AttachmentType
+  url         String
+  filename    String?
+  size        Int?
+  duration    Int?        // for audio/video files
+  
+  message     Message     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  
+  createdAt   DateTime    @default(now())
+
+  @@map("message_attachments")
+}
+
+model MessageRead {
+  id        String   @id @default(cuid())
+  messageId String
+  userId    String
+  readAt    DateTime @default(now())
+  
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_reads")
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  userId      String
+  content     String?
+  type        PostType   @default(REGULAR)
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  // Media
+  attachments PostAttachment[]
+  
+  // Engagement
+  likes       Like[]
+  comments    Comment[]
+  
+  // Visibility
+  isPublic    Boolean    @default(true)
+  
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@map("posts")
+}
+
+model PostAttachment {
+  id        String         @id @default(cuid())
+  postId    String
+  type      AttachmentType
+  url       String
+  filename  String?
+  size      Int?
+  duration  Int?
+  
+  post      Post           @relation(fields: [postId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime       @default(now())
+
+  @@map("post_attachments")
+}
+
+model Story {
+  id          String     @id @default(cuid())
+  userId      String
+  type        StoryType  @default(IMAGE)
+  url         String
+  content     String?
+  
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  views       StoryView[]
+  
+  expiresAt   DateTime   // Stories expire after 24 hours
+  createdAt   DateTime   @default(now())
+
+  @@map("stories")
+}
+
+model StoryView {
+  id      String   @id @default(cuid())
+  storyId String
+  userId  String
+  viewedAt DateTime @default(now())
+  
+  story   Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  @@unique([storyId, userId])
+  @@map("story_views")
+}
+
+model Comment {
+  id        String    @id @default(cuid())
+  postId    String
+  userId    String
+  content   String
+  
+  post      Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  likes     Like[]
+  
+  // Nested comments
+  parentId  String?
+  parent    Comment?  @relation("CommentReplies", fields: [parentId], references: [id])
+  replies   Comment[] @relation("CommentReplies")
+  
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("comments")
+}
+
+model Like {
+  id        String   @id @default(cuid())
+  userId    String
+  postId    String?
+  commentId String?
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      Post?    @relation(fields: [postId], references: [id], onDelete: Cascade)
+  comment   Comment? @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now())
+
+  @@unique([userId, postId])
+  @@unique([userId, commentId])
+  @@map("likes")
+}
+
+model Call {
+  id          String     @id @default(cuid())
+  senderId    String
+  receiverId  String
+  type        CallType   @default(AUDIO)
+  status      CallStatus @default(PENDING)
+  
+  sender      User       @relation("CallSender", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User       @relation("CallReceiver", fields: [receiverId], references: [id], onDelete: Cascade)
+  
+  startedAt   DateTime?
+  endedAt     DateTime?
+  duration    Int?       // in seconds
+  
+  createdAt   DateTime   @default(now())
+
+  @@map("calls")
+}
+
+// Enums
+enum ConversationType {
+  DIRECT
+  GROUP
+  CHANNEL
+}
+
+enum ParticipantRole {
+  ADMIN
+  MODERATOR
+  MEMBER
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  LOCATION
+  CONTACT
+  STICKER
+  GIF
+}
+
+enum AttachmentType {
+  IMAGE
+  VIDEO
+  AUDIO
+  FILE
+  DOCUMENT
+}
+
+enum PostType {
+  REGULAR
+  REEL
+  STORY
+}
+
+enum StoryType {
+  IMAGE
+  VIDEO
+}
+
+enum CallType {
+  AUDIO
+  VIDEO
+}
+
+enum CallStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  MISSED
+  ENDED
+}
